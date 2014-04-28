@@ -13,7 +13,7 @@ Create default client and a user
 
     db/setup.sh
 
-(Create SSL certificates)[http://www.akadia.com/services/ssh_test_certificate.html] for localhost and put them in cert/
+[Create SSL certificates](http://www.akadia.com/services/ssh_test_certificate.html) for localhost and put them in cert/
 
 
 ## Strategies
