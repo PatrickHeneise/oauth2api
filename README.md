@@ -1,4 +1,6 @@
 oauth2api
 =========
 
-OAuth2 Example with an API
+    ./start.sh
+
+http://www.akadia.com/services/ssh_test_certificate.html

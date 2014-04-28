@@ -2,14 +2,59 @@
  * Module dependencies.
  */
 var
+  debug = require('debug')('oauth2:lib'),
   oauth2orize = require('oauth2orize'),
   passport = require('passport'),
+  BasicStrategy = require('passport-http').BasicStrategy,
+  ClientPasswordStrategy = require('passport-oauth2-client-password').Strategy,
+  redis = require('redis'),
+  store = redis.createClient(),
   login = require('connect-ensure-login'),
   idgen = require('idgen');
 
+passport.use(new ClientPasswordStrategy(
+  function (clientId, clientSecret, done) {
+    process.nextTick(function () {
+      store.hgetall('client-' + clientId, function (error, client) {
+        if (error) {
+          return done(error);
+        }
+        if (!client) {
+          return done(null, false);
+        }
+        if (client.client_secret !== clientSecret) {
+          return done(null, false);
+        }
+        return done(null, client);
+      });
+    });
+  }
+));
+
+passport.use(new BasicStrategy({
+    usernameField: 'clientId',
+    passwordField: 'clientSecret'
+  },
+  function (clientId, clientSecret, done) {
+    process.nextTick(function () {
+      store.hgetall('client-' + clientId, function (error, client) {
+        if (error) {
+          return done(error);
+        }
+        if (!client) {
+          return done(null, false);
+        }
+        if (client.client_secret !== clientSecret) {
+          return done(null, false);
+        }
+        return done(null, client);
+      });
+    });
+  }
+));
+
 // create OAuth 2.0 server
 var server = oauth2orize.createServer();
-var db = {};
 
 // Register serialialization and deserialization functions.
 //
@@ -25,15 +70,21 @@ var db = {};
 // the client by ID from the database.
 
 server.serializeClient(function (client, done) {
-  return done(null, client.id);
+  debug('serialise client: %s', client.client_id);
+
+  store.hmset('session-client-' + client.client_id, client);
+  return done(null, client.client_id);
 });
 
 server.deserializeClient(function (id, done) {
-  db.clients.find(id, function (err, client) {
-    if (err) {
-      return done(err);
+  debug('de-serialise client: %s', id);
+
+  store.hgetall('session-client-' + id, function (error, client) {
+    if (error) {
+      done(error);
+    } else {
+      done(null, client);
     }
-    return done(null, client);
   });
 });
 
@@ -52,11 +103,15 @@ server.deserializeClient(function (id, done) {
 // values, and will be exchanged for an access token.
 
 server.grant(oauth2orize.grant.code(function (client, redirectURI, user, ares, done) {
-  var code = idgen(16);
+  var code = idgen(64);
 
-  db.authorizationCodes.save(code, client.id, redirectURI, user.id, function (err) {
-    if (err) {
-      return done(err);
+  store.hmset('grant-' + code, {
+    client: client.client_id,
+    redirect_uri: redirectURI,
+    user: user.id
+  }, function (error) {
+    if (error) {
+      return done(error);
     }
     done(null, code);
   });
@@ -71,13 +126,18 @@ server.grant(oauth2orize.grant.code(function (client, redirectURI, user, ares, d
 server.grant(oauth2orize.grant.token(function (client, user, ares, done) {
   var token = idgen(256);
 
-  db.accessTokens.save(token, user.id, client.clientId, function (err) {
-    if (err) {
-      return done(err);
+  store.hmset('authorization-code-' + token, {
+    user: user.id,
+    ares: ares,
+    client: client.client_id
+  }, function (error) {
+    if (error) {
+      return done(error);
     }
     done(null, token);
   });
 }));
+
 
 // Exchange authorization codes for access tokens.  The callback accepts the
 // `client`, which is exchanging `code` and any `redirectURI` from the
@@ -86,21 +146,27 @@ server.grant(oauth2orize.grant.token(function (client, user, ares, done) {
 // code.
 
 server.exchange(oauth2orize.exchange.code(function (client, code, redirectURI, done) {
-  db.authorizationCodes.find(code, function (err, authCode) {
-    if (err) {
-      return done(err);
+  debug('token exchange', client.client_id, code);
+
+  store.hgetall('grant-' + code, function (error, authCode) {
+    if (error) {
+      return done(error);
     }
-    if (client.id !== authCode.clientID) {
+    if (client.client_id !== authCode.client) {
       return done(null, false);
     }
-    if (redirectURI !== authCode.redirectURI) {
+    if (redirectURI !== authCode.redirect_uri) {
       return done(null, false);
     }
 
     var token = idgen(256);
-    db.accessTokens.save(token, authCode.userID, authCode.clientID, function (err) {
-      if (err) {
-        return done(err);
+
+    store.hmset('access-token-' + token, {
+      user: authCode.user,
+      client: authCode.client
+    }, function (error) {
+      if (error) {
+        return done(error);
       }
       done(null, token);
     });
@@ -113,22 +179,23 @@ server.exchange(oauth2orize.exchange.code(function (client, code, redirectURI, d
 // application issues an access token on behalf of the user who authorized the code.
 
 server.exchange(oauth2orize.exchange.password(function (client, username, password, scope, done) {
+  debug('user id password exchange', client, username);
 
   //Validate the client
-  db.clients.findByClientId(client.clientId, function (err, localClient) {
-    if (err) {
-      return done(err);
+  store.hgetall('client-' + client.clientId, function (error, localClient) {
+    if (error) {
+      return done(error);
     }
     if (localClient === null) {
       return done(null, false);
     }
-    if (localClient.clientSecret !== client.clientSecret) {
+    if (localClient.client_secret !== client.clientSecret) {
       return done(null, false);
     }
     //Validate the user
-    db.users.findByUsername(username, function (err, user) {
-      if (err) {
-        return done(err);
+    store.hgetall('user-' + username, function (error, user) {
+      if (error) {
+        return done(error);
       }
       if (user === null) {
         return done(null, false);
@@ -138,9 +205,12 @@ server.exchange(oauth2orize.exchange.password(function (client, username, passwo
       }
       //Everything validated, return the token
       var token = idgen(256);
-      db.accessTokens.save(token, user.id, client.clientId, function (err) {
-        if (err) {
-          return done(err);
+      store.hmset('access-token-' + token, {
+        user: user.id,
+        client: client.clientId
+      }, function (error) {
+        if (error) {
+          return done(error);
         }
         done(null, token);
       });
@@ -154,23 +224,26 @@ server.exchange(oauth2orize.exchange.password(function (client, username, passwo
 // application issues an access token on behalf of the client who authorized the code.
 
 server.exchange(oauth2orize.exchange.clientCredentials(function (client, scope, done) {
+  debug('exchange client id/secret for access token', client);
 
   //Validate the client
-  db.clients.findByClientId(client.clientId, function (err, localClient) {
-    if (err) {
-      return done(err);
+  store.hgetall('client-' + client.clientId, function (error, localClient) {
+    if (error) {
+      return done(error);
     }
     if (localClient === null) {
       return done(null, false);
     }
-    if (localClient.clientSecret !== client.clientSecret) {
+    if (localClient.client_secret !== client.clientSecret) {
       return done(null, false);
     }
     var token = idgen(256);
     //Pass in a null for user id since there is no user with this grant type
-    db.accessTokens.save(token, null, client.clientId, function (err) {
-      if (err) {
-        return done(err);
+    store.hmset('access-token-' + token, {
+      client: client.clientId
+    }, function (error) {
+      if (error) {
+        return done(error);
       }
       done(null, token);
     });
@@ -196,23 +269,32 @@ server.exchange(oauth2orize.exchange.clientCredentials(function (client, scope, 
 exports.authorization = [
   login.ensureLoggedIn(),
   server.authorization(function (clientID, redirectURI, done) {
-    db.clients.findByClientId(clientID, function (err, client) {
-      if (err) {
-        return done(err);
+    debug('authorizadion', clientID);
+
+    store.hgetall('client-' + clientID, function (error, client) {
+      if (error) {
+        return done(error);
       }
-      // WARNING: For security purposes, it is highly advisable to check that
-      //          redirectURI provided by the client matches one registered with
-      //          the server.  For simplicity, this example does not.  You have
-      //          been warned.
-      return done(null, client, redirectURI);
+      if (redirectURI !== client.redirect_uri) {
+        return done('invalid redirect');
+      } else {
+        return done(null, client, redirectURI);
+      }
     });
   }),
   function (req, res) {
-    res.render('dialog', {
-      transactionID: req.oauth2.transactionID,
-      user: req.user,
-      client: req.oauth2.client
-    });
+    res.send(
+      '<p>Hi ' + req.user.email + '</p>' +
+      '<p><b>' + req.oauth2.client.client_name + '</b> is requesting access to your account.</p>' +
+      '<p>Do you approve?</p>' +
+      '<form action="/oauth2/authorize/decision" method="post">' +
+      '<input name="transaction_id" type="hidden" value="' + req.oauth2.transactionID + '">' +
+      '<div>' +
+      '<input type="submit" value="Allow" id="allow">' +
+      '<input type="submit" value="Deny" name="cancel" id="deny">' +
+      '</div>' +
+      '</form>'
+    );
   }
 ];
 

@@ -12,18 +12,18 @@
   },
   "dependencies": {
     "async": "~0.2.9",
-    "node-uuid": "~1.4.1",
     "oauth2orize": "^1.0.1",
     "passport": "~0.1.17",
     "passport-http": "~0.2.2",
     "passport-http-bearer": "^1.0.1",
     "passport-local": "^1.0.0",
     "passport-oauth": "^1.0.0",
+    "passport-oauth2-client-password": "^0.1.1",
     "passport-twitter": "^1.0.2",
     "redis": "^0.10.1",
     "request": "~2.30.0",
     "response-time": "^1.0.0",
-    "string": "~1.8.0",
+    "string": "~1.8.0"
   },
   "devDependencies": {
     "mocha": "~1.13.0",
