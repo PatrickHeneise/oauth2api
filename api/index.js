@@ -2,7 +2,6 @@ var
   debug = require('debug')('oauth:index'),
   passport = require('passport'),
   LocalStrategy = require('passport-local').Strategy,
-  TwitterStrategy = require('passport-twitter').Strategy,
   BearerStrategy = require('passport-http-bearer').Strategy,
   ExampleStrategy = require('../passport-example').Strategy,
   redis = require('redis'),

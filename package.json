@@ -19,7 +19,6 @@
     "passport-local": "^1.0.0",
     "passport-oauth": "^1.0.0",
     "passport-oauth2-client-password": "^0.1.1",
-    "passport-twitter": "^1.0.2",
     "redis": "^0.10.1",
     "request": "~2.30.0",
     "response-time": "^1.0.0",
