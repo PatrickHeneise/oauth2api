@@ -149,6 +149,8 @@ server.exchange(oauth2orize.exchange.code(function (client, code, redirectURI, d
   debug('token exchange', client.client_id, code);
 
   store.hgetall('grant-' + code, function (error, authCode) {
+    var token = idgen(128);
+
     if (error) {
       return done(error);
     }
@@ -158,8 +160,6 @@ server.exchange(oauth2orize.exchange.code(function (client, code, redirectURI, d
     if (redirectURI !== authCode.redirect_uri) {
       return done(null, false);
     }
-
-    var token = idgen(256);
 
     store.hmset('access-token-' + token, {
       user: authCode.user,

@@ -15,7 +15,6 @@ var
   app = express(),
   core;
 
-app.set('port', process.env.PORT || 3000);
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded());
 app.use(cookieParser());

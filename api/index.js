@@ -103,9 +103,14 @@ passport.use(new BearerStrategy(
 ));
 
 exports.configure = function (app) {
+  app.get('/', function (req, res) {
+    console.log(req);
+    res.send('<html><body>' + JSON.stringify(req.user) + '</body></html>');
+  });
+
   app.get('/start', function (req, res) {
-    res.send('<a href="http://localhost:3000/dialog/authorize?response_type=code&client_id=coolclient' +
-      '&scope=somescope&redirect_uri=http://localhost:3000">authorize</a>');
+    res.send('<a href="https://localhost:3000/oauth2/authorize?response_type=code&client_id=coolclient' +
+      '&scope=somescope&redirect_uri=https://localhost:3000/oauth2/callback">authorize</a>');
   });
 
   // OAuth 2.0 Server routes
@@ -113,7 +118,7 @@ exports.configure = function (app) {
     res.send('<form action="/login" method="post"><div><label>email:</label><input type="text"' +
       ' name="email"/><br/></div><div><label>Password:</label><input type="password" name=' +
       '"password"/></div><div><input type="submit" value="Submit"/></div></form><p><small>Hint - ' +
-      'anything</small></p>');
+      'bob@secret.com / helloworld</small></p>');
   });
 
   app.post('/login', passport.authenticate('local', {
